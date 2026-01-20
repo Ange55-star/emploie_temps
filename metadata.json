@@ -1,5 +1,5 @@
 {
-  "description": "Emploie du temps Ict4dL2(non modifier)",
-  "requestFramePermissions": [],
-  "name": "Emploie du temps"
+  "name": "ICT Portal Django Edition",
+  "description": "Système de gestion d'emploi du temps universitaire complet avec Django, Python et Tailwind CSS.",
+  "requestFramePermissions": []
 }

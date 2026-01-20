@@ -1,0 +1,40 @@
+
+{% extends 'base.html' %}
+{% block title %}Emploi du Temps{% endblock %}
+
+{% block content %}
+<div class="mb-12 text-center">
+    <h1 class="text-4xl font-black text-slate-900 uppercase tracking-tighter">ICT4D - Licence 2</h1>
+    <p class="text-slate-400 font-bold uppercase text-xs tracking-widest mt-2">Semestre 1 - Année Académique 2025/2026</p>
+</div>
+
+<div class="bg-white rounded-[40px] shadow-2xl overflow-hidden border border-slate-100 p-8">
+    <div class="overflow-x-auto">
+        <table class="w-full border-separate border-spacing-4">
+            <thead>
+                <tr>
+                    <th></th>
+                    {% for day in days %}
+                    <th class="text-[10px] font-black text-slate-300 uppercase tracking-widest pb-4">{{ day }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for slot in slots %}
+                <tr>
+                    <td class="text-[10px] font-black text-slate-400 whitespace-nowrap pr-8 align-top pt-4">{{ slot }}</td>
+                    {% for day in days %}
+                    <td class="align-top min-w-[250px]">
+                        <div class="min-h-[120px] rounded-[32px] p-6 border-2 border-dashed border-slate-50 flex flex-col items-center justify-center bg-slate-50/30">
+                            <!-- Ici Django filtrerait les 'entries' correspondant à day et slot -->
+                            <span class="text-[9px] font-black text-slate-200 uppercase tracking-widest">Libre</span>
+                        </div>
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -3,36 +3,42 @@
 {% block title %}Espace Enseignant{% endblock %}
 
 {% block content %}
-<div class="max-w-5xl mx-auto animate-in">
-    <div class="flex justify-between items-end bg-emerald-600 p-10 rounded-[40px] text-white shadow-2xl mb-8">
-        <div>
-            <h1 class="text-3xl font-black uppercase tracking-tighter">Mes Disponibilités</h1>
-            <p class="text-emerald-100 font-bold text-[10px] uppercase tracking-widest mt-1">Cochez vos créneaux puis validez</p>
+<div class="max-w-6xl mx-auto animate-in space-y-10">
+    <div class="flex justify-between items-center bg-emerald-600 p-12 rounded-[50px] text-white shadow-2xl overflow-hidden relative">
+        <div class="relative z-10">
+            <h1 class="text-4xl font-black uppercase tracking-tighter">Mes Disponibilités</h1>
+            <p class="text-emerald-100 font-bold text-xs uppercase tracking-[0.3em] mt-2">Cochez vos créneaux préférentiels</p>
+        </div>
+        <div class="absolute right-0 top-0 opacity-10 transform translate-x-10 -translate-y-10 scale-150">
+            <svg class="w-64 h-64" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
         </div>
     </div>
 
-    <form method="POST" class="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
+    <!-- Formulaire corrigé avec action vers submit_vœu -->
+    <form method="POST" action="{% url 'submit_vœu' %}" class="bg-white p-10 rounded-[50px] shadow-sm border border-slate-100">
         {% csrf_token %}
         <div class="overflow-x-auto">
-            <table class="w-full border-separate border-spacing-2">
+            <table class="w-full border-separate border-spacing-4">
                 <thead>
                     <tr>
-                        <th></th>
+                        <th class="w-24"></th>
                         {% for day in days %}
-                        <th class="text-[9px] font-black text-slate-300 uppercase py-2">{{ day }}</th>
+                        <th class="text-[10px] font-black text-slate-300 uppercase tracking-widest pb-6">{{ day }}</th>
                         {% endfor %}
                     </tr>
                 </thead>
                 <tbody>
                     {% for slot in slots %}
                     <tr>
-                        <td class="text-[8px] font-black text-slate-400 pr-4">{{ slot }}</td>
+                        <td class="text-[10px] font-black text-slate-400 align-top pt-6 pr-6 border-r border-slate-50">{{ slot }}</td>
                         {% for day in days %}
                         <td>
-                            <label class="cursor-pointer block">
+                            <label class="cursor-pointer block group">
                                 <input type="checkbox" name="slots" value="{{ day }}|{{ slot }}" class="hidden peer">
-                                <div class="h-16 w-full rounded-2xl border-2 border-slate-50 bg-slate-50 peer-checked:bg-emerald-500 peer-checked:border-emerald-500 flex items-center justify-center transition-all">
-                                    <span class="text-white opacity-0 peer-checked:opacity-100">✓</span>
+                                <div class="h-20 w-full rounded-3xl border-2 border-slate-50 bg-slate-50/50 peer-checked:bg-emerald-500 peer-checked:border-emerald-500 peer-checked:shadow-lg peer-checked:shadow-emerald-200 flex items-center justify-center transition-all duration-300 group-hover:border-emerald-200">
+                                    <div class="text-white opacity-0 peer-checked:opacity-100 transform scale-50 peer-checked:scale-100 transition-all">
+                                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
+                                    </div>
                                 </div>
                             </label>
                         </td>
@@ -42,9 +48,14 @@
                 </tbody>
             </table>
         </div>
-        <button type="submit" class="mt-8 w-full bg-[#0f172a] text-white p-6 rounded-[32px] font-black uppercase text-xs tracking-widest shadow-2xl hover:bg-emerald-600 transition-all">
-            Transmettre mes vœux à l'administration
-        </button>
+        
+        <div class="mt-12 flex justify-center">
+            <button type="submit" class="group relative px-12 py-6 bg-[#0f172a] text-white rounded-[32px] font-black uppercase text-xs tracking-widest shadow-2xl hover:bg-emerald-600 transition-all active:scale-95">
+                <span class="relative z-10 flex items-center gap-3">
+                    Transmettre mes vœux <svg class="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                </span>
+            </button>
+        </div>
     </form>
 </div>
 {% endblock %}

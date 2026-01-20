@@ -1,0 +1,73 @@
+
+{% extends 'base.html' %}
+{% block title %}Mon Planning Final{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto animate-in space-y-12">
+    <div class="flex flex-col md:flex-row justify-between items-end gap-6 border-b-2 border-slate-100 pb-12">
+        <div>
+            <h1 class="text-5xl font-black text-slate-900 tracking-tighter uppercase leading-none">Mon Planning Final</h1>
+            <p class="text-indigo-500 font-black uppercase text-[10px] tracking-[0.4em] mt-4 flex items-center gap-3">
+                <span class="w-10 h-1 bg-indigo-500"></span> Sessions d'enseignement validées
+            </p>
+        </div>
+        <div class="bg-white px-6 py-4 rounded-[25px] shadow-sm border border-slate-100 text-right">
+            <p class="text-[8px] font-black text-slate-300 uppercase">Enseignant</p>
+            <p class="text-sm font-black text-slate-900 uppercase">{{ teacher }}</p>
+        </div>
+    </div>
+
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {% for entry in entries %}
+        <!-- Le Cadran à 5 Informations (Version HTML/Tailwind) -->
+        <div class="bg-white rounded-[32px] p-8 shadow-xl border border-slate-50 hover:border-indigo-200 transition-all group relative overflow-hidden flex flex-col justify-between min-h-[240px]">
+            <!-- 1. Date (Badge) -->
+            <div class="absolute left-0 top-0 bg-indigo-600 text-white px-5 py-2 rounded-br-2xl shadow-lg z-10">
+                <p class="text-[10px] font-black uppercase tracking-widest">{{ entry.date|date:"d M Y" }}</p>
+            </div>
+
+            <!-- 2. Horaire -->
+            <div class="flex justify-end mb-4">
+                <div className="flex items-center gap-1.5 text-indigo-500 bg-indigo-50 px-4 py-1.5 rounded-full font-black text-[10px] uppercase">
+                    {{ entry.slot }}
+                </div>
+            </div>
+
+            <!-- 3. Code & Nom UE -->
+            <div class="my-6">
+                <span class="bg-slate-100 text-slate-500 px-3 py-1 rounded text-[9px] font-black uppercase tracking-tighter mb-2 inline-block">
+                    {{ entry.ue_code }}
+                </span>
+                <h3 class="text-2xl font-black text-slate-900 uppercase leading-none tracking-tighter">
+                    {{ entry.ue_name }}
+                </h3>
+            </div>
+
+            <!-- Footer: Enseignant & Salle -->
+            <div class="pt-6 border-t border-slate-50 flex justify-between items-center mt-auto">
+                <!-- 4. Enseignant -->
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white font-black text-xs">
+                        {{ teacher.user.last_name|first }}
+                    </div>
+                    <div>
+                        <p class="text-[8px] font-bold text-slate-400 uppercase mb-0.5 tracking-widest">Responsable</p>
+                        <p class="text-[11px] font-black text-slate-700 uppercase">{{ teacher }}</p>
+                    </div>
+                </div>
+                <!-- 5. Salle -->
+                <div class="text-right">
+                    <p class="text-[8px] font-bold text-slate-400 uppercase mb-1 tracking-widest">Localisation</p>
+                    <p class="text-sm font-black text-indigo-600 uppercase">{{ entry.room }}</p>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full py-40 text-center bg-white rounded-[60px] border-4 border-dashed border-slate-100">
+            <h3 class="text-xl font-black text-slate-300 uppercase tracking-widest">Aucune séance planifiée</h3>
+            <p class="text-slate-400 text-xs mt-2 uppercase">Contactez l'administration pour plus d'informations</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

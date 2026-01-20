@@ -1,13 +1,12 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
   Calendar, ShieldCheck, MapPin, Clock, Users, AlertCircle, 
   CheckCircle, BookOpen, User as UserIcon, GraduationCap, 
-  History, Settings, PlusCircle, Check, X, School
+  Settings, Check, X, School, ArrowRight, Bell, Zap
 } from 'lucide-react';
 
-const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 const SLOTS = ['08h00 - 11h00', '11h30 - 14h30', '15h00 - 18h00'];
 
 const TEACHERS = [
@@ -18,40 +17,73 @@ const TEACHERS = [
 
 const App = () => {
   const [role, setRole] = useState<'TEACHER' | 'ADMIN'>('TEACHER');
-  const [activeTab, setActiveTab] = useState<'WISHES' | 'PLAN' | 'ARBITRAGE' | 'AUDIT' | 'CONFIG' | 'SCHEDULE'>('WISHES');
+  const [activeTab, setActiveTab] = useState<'PLAN' | 'ARBITRAGE' | 'AUDIT' | 'CONFIG' | 'SCHEDULE'>('SCHEDULE');
   
-  // Configuration Admin
-  const [rooms, setRooms] = useState([
+  // Salles
+  const [rooms] = useState([
     { id: 1, name: 'Amphi 200', capacity: 200 },
     { id: 2, name: 'Salle 105', capacity: 40 },
     { id: 3, name: 'Labo Réseaux', capacity: 25 },
   ]);
-  const [classes, setClasses] = useState([
-    { id: 1, name: 'Licence 2 ICT4D', studentCount: 180, semester: 1, year: '2024-2025' },
-    { id: 2, name: 'Master 1 GL', studentCount: 35, semester: 1, year: '2024-2025' },
+
+  // Classes avec objectifs de séances (Quotas)
+  const [classes] = useState([
+    { id: 1, name: 'Licence 2 ICT4D', studentCount: 180, targetSessions: 3 }, 
+    { id: 2, name: 'Master 1 GL', studentCount: 35, targetSessions: 2 },
   ]);
 
-  // État opérationnel
-  const [selectedTeacherId, setSelectedTeacherId] = useState(1);
+  const [selectedTeacherId] = useState(1);
   const [proposals, setProposals] = useState<any[]>([]);
-  const [finalSchedule, setFinalSchedule] = useState<any[]>([]);
+  const [finalSchedule, setFinalSchedule] = useState<any[]>([
+    {
+      id: 101,
+      ueCode: 'ICT 203',
+      ueName: 'Génie Logiciel',
+      teacherName: 'Dr. EBANDA',
+      roomName: 'Amphi 200',
+      date: '2025-05-12',
+      slot: '08h00 - 11h00',
+      className: 'Licence 2 ICT4D'
+    }
+  ]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<string[]>([]);
 
-  // Formulaire avec Date
   const [form, setForm] = useState({ 
     classId: '', roomId: '', ueCode: '', ueName: '', day: '', slot: '', date: '' 
   });
 
   const currentTeacher = TEACHERS.find(t => t.id === selectedTeacherId);
 
+  // --- LOGIQUE DE SURVEILLANCE DES QUOTAS ---
+  const classProgress = useMemo(() => {
+    return classes.map(c => {
+      const count = finalSchedule.filter(s => s.className === c.name).length;
+      return { ...c, currentCount: count, isFinalized: count >= c.targetSessions };
+    });
+  }, [finalSchedule, classes]);
+
+  // Notification automatique à l'administrateur
+  useEffect(() => {
+    classProgress.forEach(cp => {
+      if (cp.isFinalized && !auditLogs.some(log => log.details.includes(`FINALISATION ${cp.name}`))) {
+        const msg = `L'emploi du temps de la classe ${cp.name} est désormais COMPLET (${cp.currentCount}/${cp.targetSessions}).`;
+        if (role === 'ADMIN') {
+           setNotifications(prev => [...new Set([...prev, msg])]);
+        }
+        logAction('SYSTÈME', `FINALISATION ${cp.name}`, 'Automatique');
+      }
+    });
+  }, [classProgress, role]);
+
   const logAction = (action: string, details: string, target: string) => {
     const newLog = {
       id: Date.now(),
-      user: role === 'ADMIN' ? 'Admin Système' : currentTeacher?.name,
+      user: action === 'SYSTÈME' ? '🤖 Moteur de Quota' : (role === 'ADMIN' ? 'Admin Système' : currentTeacher?.name),
       target: target,
       action: action,
       details: details,
-      time: new Date().toLocaleString('fr-FR'),
+      time: new Date().toLocaleTimeString('fr-FR'),
       role: role
     };
     setAuditLogs(prev => [newLog, ...prev]);
@@ -64,7 +96,6 @@ const App = () => {
   const handleAddProposal = (e: React.FormEvent) => {
     e.preventDefault();
     if (isCapacityInsufficient) return;
-
     const newProposal = {
       id: Date.now(),
       ...form,
@@ -74,13 +105,10 @@ const App = () => {
       roomName: selectedRoom?.name,
       status: 'PENDING'
     };
-
     setProposals(prev => [...prev, newProposal]);
-    // Fix: Corrected argument count for logAction by removing redundant 'TEACHER' parameter
     logAction('PROPOSITION SÉANCE', `${form.ueCode} - ${form.date}`, currentTeacher?.name || '');
     setForm({ classId: '', roomId: '', ueCode: '', ueName: '', day: '', slot: '', date: '' });
     setActiveTab('SCHEDULE');
-    alert("Proposition envoyée pour arbitrage.");
   };
 
   const validateProposal = (id: number) => {
@@ -94,259 +122,239 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 pb-24 font-['Plus_Jakarta_Sans']">
-      {/* Switcher de rôle flottant */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-[#0f172a] p-1.5 rounded-2xl shadow-2xl flex gap-1 border border-white/10">
+      
+      {/* TOAST NOTIFICATION ADMIN */}
+      {role === 'ADMIN' && notifications.length > 0 && (
+        <div className="fixed top-24 right-8 z-[110] space-y-3 pointer-events-none">
+          {notifications.map((n, i) => (
+            <div key={i} className="bg-[#0f172a] text-white p-5 rounded-3xl shadow-2xl border border-indigo-500/30 flex items-start gap-4 animate-in max-w-sm pointer-events-auto">
+              <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center shrink-0 animate-pulse">
+                <Bell size={18} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase text-indigo-400 mb-1">Alerte Système</p>
+                <p className="text-xs font-bold leading-relaxed">{n}</p>
+                <button onClick={() => setNotifications(prev => prev.filter((_, idx) => idx !== i))} className="mt-2 text-[9px] font-black uppercase text-slate-400 hover:text-white transition-colors">Ignorer</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Role Switcher */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-slate-900/95 backdrop-blur-xl p-1.5 rounded-2xl shadow-2xl flex gap-1 border border-white/10">
         <button onClick={() => {setRole('TEACHER'); setActiveTab('SCHEDULE')}} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${role === 'TEACHER' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>
           <UserIcon size={14}/> Enseignant
         </button>
-        <button onClick={() => {setRole('ADMIN'); setActiveTab('CONFIG')}} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${role === 'ADMIN' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+        <button onClick={() => {setRole('ADMIN'); setActiveTab('ARBITRAGE')}} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${role === 'ADMIN' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'}`}>
           <ShieldCheck size={14}/> Administrateur
         </button>
       </div>
 
-      <nav className="bg-[#0f172a] text-white p-6 sticky top-0 z-50 shadow-xl">
+      <nav className="bg-[#0f172a] text-white p-6 sticky top-0 z-50 shadow-xl border-b border-white/5">
         <div className="container mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <School className="text-indigo-400" size={24}/>
-            <span className="text-xl font-black uppercase tracking-tighter">ICT <span className="text-indigo-400">Portal</span></span>
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+               <School className="text-white" size={20}/>
+            </div>
+            <span className="text-xl font-black uppercase tracking-tighter italic">ICT <span className="text-indigo-400">Portal</span></span>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => setActiveTab('SCHEDULE')} className={`text-[10px] font-black uppercase px-4 py-2 rounded-lg transition-all ${activeTab === 'SCHEDULE' ? 'bg-white/10' : 'text-slate-400'}`}>Planning Final</button>
+          <div className="flex gap-1.5">
+            <button onClick={() => setActiveTab('SCHEDULE')} className={`text-[9px] font-black uppercase px-4 py-2.5 rounded-xl transition-all ${activeTab === 'SCHEDULE' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'}`}>Planning Final</button>
             {role === 'TEACHER' ? (
-              <button onClick={() => setActiveTab('PLAN')} className="text-[10px] font-black uppercase px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 transition-all">Ajouter séance</button>
+              <button onClick={() => setActiveTab('PLAN')} className="text-[9px] font-black uppercase px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-lg shadow-emerald-500/20">Ajouter séance</button>
             ) : (
               <>
-                <button onClick={() => setActiveTab('CONFIG')} className={`text-[10px] font-black uppercase px-4 py-2 rounded-lg transition-all ${activeTab === 'CONFIG' ? 'bg-white/10' : 'text-slate-400'}`}>Configuration</button>
-                <button onClick={() => setActiveTab('ARBITRAGE')} className={`text-[10px] font-black uppercase px-4 py-2 rounded-lg transition-all ${activeTab === 'ARBITRAGE' ? 'bg-white/10' : 'text-slate-400'}`}>Arbitrage</button>
+                <button onClick={() => setActiveTab('ARBITRAGE')} className={`text-[9px] font-black uppercase px-4 py-2.5 rounded-xl transition-all ${activeTab === 'ARBITRAGE' ? 'bg-white/10 text-white' : 'text-slate-400'}`}>Arbitrage</button>
+                <button onClick={() => setActiveTab('CONFIG')} className={`text-[9px] font-black uppercase px-4 py-2.5 rounded-xl transition-all ${activeTab === 'CONFIG' ? 'bg-white/10 text-slate-400' : 'text-slate-400'}`}>Configuration</button>
               </>
             )}
-            <button onClick={() => setActiveTab('AUDIT')} className={`text-[10px] font-black uppercase px-4 py-2 rounded-lg transition-all ${activeTab === 'AUDIT' ? 'bg-white/10' : 'text-slate-400'}`}>Audit</button>
+            <button onClick={() => setActiveTab('AUDIT')} className={`text-[9px] font-black uppercase px-4 py-2.5 rounded-xl transition-all ${activeTab === 'AUDIT' ? 'bg-white/10 text-slate-400' : 'text-slate-400'}`}>Audit</button>
           </div>
         </div>
       </nav>
 
-      <main className="container mx-auto p-8">
+      <main className="container mx-auto p-8 lg:p-12">
         
-        {/* EMPLOI DU TEMPS FINAL (CADRANS À 5 INFORMATIONS) */}
+        {/* EMPLOI DU TEMPS FINAL (CADRANS À 5 INFOS) */}
         {activeTab === 'SCHEDULE' && (
-          <div className="animate-in space-y-12">
-            <header className="text-center space-y-4">
-               <h1 className="text-5xl font-black uppercase tracking-tighter">Emploi du Temps Final</h1>
-               <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.4em]">Affichage consolidé des sessions d'enseignement</p>
+          <div className="animate-in space-y-12 max-w-7xl mx-auto">
+            <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-slate-200">
+               <div>
+                  <h1 className="text-5xl font-black uppercase tracking-tighter text-slate-900 leading-none">Emploi du Temps</h1>
+                  <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.4em] mt-3 flex items-center gap-2">
+                    <span className="w-10 h-1 bg-indigo-500 rounded-full"></span> 
+                    Séances consolidées et validées
+                  </p>
+               </div>
+               <div className="flex items-center gap-3 bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
+                  <Calendar className="text-indigo-500" size={18}/>
+                  <span className="text-[10px] font-black text-slate-700 uppercase">Semestre 1 • 2024-2025</span>
+               </div>
             </header>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
                {finalSchedule.map(session => (
-                 <div key={session.id} className="bg-white rounded-[40px] p-8 shadow-xl border border-slate-100 hover:border-indigo-400 transition-all group relative overflow-hidden flex flex-col justify-between min-h-[280px]">
-                    {/* 1. Date de passage (Badge haut gauche) */}
-                    <div className="absolute top-0 left-0 bg-indigo-600 text-white px-6 py-2 rounded-br-3xl shadow-lg z-10">
-                       <p className="text-[10px] font-black uppercase tracking-widest">{new Date(session.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                    </div>
-
-                    {/* 2. Plage horaire (Haut droite) */}
-                    <div className="flex justify-end items-start pt-2">
-                       <div className="bg-indigo-50 text-indigo-600 px-4 py-1.5 rounded-full flex items-center gap-2">
-                          <Clock size={12}/>
-                          <span className="text-[10px] font-black uppercase">{session.slot}</span>
+                 <div key={session.id} className="bg-white rounded-[40px] shadow-2xl border border-slate-100 hover:border-indigo-400 transition-all group overflow-hidden flex flex-col min-h-[300px] hover:-translate-y-1">
+                    <div className="bg-[#0f172a] p-6 text-white flex justify-between items-center">
+                       <div className="flex items-center gap-2.5">
+                          <Calendar size={14} className="text-indigo-300"/>
+                          <span className="text-[10px] font-black uppercase tracking-widest">{new Date(session.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                       </div>
+                       <div className="flex items-center gap-2 text-indigo-300">
+                          <Clock size={14}/>
+                          <span className="text-[10px] font-black">{session.slot}</span>
                        </div>
                     </div>
-
-                    {/* 3. Code & Nom UE (Centre) */}
-                    <div className="my-8">
-                       <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter mb-2 inline-block">
-                          {session.ueCode}
-                       </span>
-                       <h3 className="text-2xl font-black text-slate-900 uppercase leading-tight tracking-tighter">
-                          {session.ueName}
-                       </h3>
-                       <div className="mt-3 flex items-center gap-2 text-indigo-500">
-                          <GraduationCap size={14}/>
-                          <span className="text-[10px] font-bold uppercase">{session.className}</span>
-                       </div>
-                    </div>
-
-                    {/* Footer : Enseignant & Salle */}
-                    <div className="pt-6 border-t border-slate-50 flex justify-between items-center mt-auto">
-                       {/* 4. Nom de l'enseignant */}
-                       <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-black text-xs">
-                             {session.teacherName[0]}
+                    <div className="p-8 flex-1 flex flex-col justify-between">
+                       <div>
+                          <div className="flex items-center gap-2 mb-2">
+                             <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-tighter">{session.ueCode}</span>
+                             <div className="h-px flex-1 bg-slate-100"></div>
                           </div>
-                          <div>
-                             <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Enseignant</p>
-                             <p className="text-[11px] font-black text-slate-700 uppercase">{session.teacherName}</p>
-                          </div>
+                          <h3 className="text-2xl font-black text-slate-900 uppercase leading-tight tracking-tighter">{session.ueName}</h3>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 flex items-center gap-1.5"><GraduationCap size={12}/> {session.className}</p>
                        </div>
-                       
-                       {/* 5. Salle */}
-                       <div className="text-right">
-                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Localisation</p>
-                          <div className="flex items-center justify-end gap-1.5 text-emerald-600">
-                             <MapPin size={12}/>
-                             <p className="text-xs font-black uppercase">{session.roomName}</p>
+                       <div className="pt-6 border-t border-slate-50 flex justify-between items-end">
+                          <div className="flex items-center gap-3">
+                             <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-indigo-600 font-black text-xs border border-slate-200">{session.teacherName[0]}</div>
+                             <div>
+                                <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-0.5">Enseignant</p>
+                                <p className="text-[11px] font-black text-slate-700 uppercase">{session.teacherName}</p>
+                             </div>
+                          </div>
+                          <div className="text-right">
+                             <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-1.5">Salle</p>
+                             <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100">
+                                <MapPin size={12}/>
+                                <span className="text-[11px] font-black uppercase">{session.roomName}</span>
+                             </div>
                           </div>
                        </div>
                     </div>
                  </div>
                ))}
-               {finalSchedule.length === 0 && (
-                 <div className="col-span-full py-40 text-center bg-white rounded-[60px] border-4 border-dashed border-slate-100 text-slate-200 uppercase font-black text-xs tracking-[0.2em]">
-                   Aucune séance validée pour le moment
-                 </div>
-               )}
             </div>
           </div>
         )}
 
-        {/* FORMULAIRE D'AJOUT (ENSEIGNANT) */}
+        {/* ARBITRAGE (AVEC MONITORING DE COMPLÉTION) */}
+        {role === 'ADMIN' && activeTab === 'ARBITRAGE' && (
+           <div className="max-w-4xl mx-auto space-y-12 animate-in">
+              <header className="space-y-6">
+                <h2 className="text-3xl font-black uppercase tracking-tighter">Arbitrage & Monitoring</h2>
+                <div className="grid grid-cols-2 gap-6">
+                  {classProgress.map(cp => (
+                    <div key={cp.id} className={`p-6 rounded-[35px] border ${cp.isFinalized ? 'bg-emerald-50 border-emerald-100' : 'bg-white border-slate-100'} shadow-sm transition-all`}>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-3">
+                           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${cp.isFinalized ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                             {cp.isFinalized ? <Zap size={18} /> : <Clock size={18} />}
+                           </div>
+                           <div>
+                              <p className="text-xs font-black uppercase text-slate-900">{cp.name}</p>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Quota : {cp.targetSessions} séances</p>
+                           </div>
+                        </div>
+                        {cp.isFinalized && <span className="bg-emerald-600 text-white text-[8px] font-black px-3 py-1 rounded-full uppercase">Finalisé</span>}
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-1000 ${cp.isFinalized ? 'bg-emerald-500' : 'bg-indigo-500'}`} 
+                          style={{ width: `${Math.min(100, (cp.currentCount / cp.targetSessions) * 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </header>
+
+              <div className="space-y-4">
+                 <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 ml-4">Propositions en attente</h3>
+                 {proposals.map(p => (
+                    <div key={p.id} className="bg-white p-6 rounded-[35px] border border-slate-100 flex items-center justify-between group hover:border-amber-400 transition-all shadow-sm">
+                       <div className="flex items-center gap-6">
+                          <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-black">{p.teacherName[0]}</div>
+                          <div>
+                             <p className="text-sm font-black text-slate-900 uppercase">{p.ueName}</p>
+                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{p.teacherName} • {p.roomName} • {p.date}</p>
+                          </div>
+                       </div>
+                       <div className="flex gap-2">
+                          <button onClick={() => setProposals(prev => prev.filter(x => x.id !== p.id))} className="w-12 h-12 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all"><X size={18}/></button>
+                          <button onClick={() => validateProposal(p.id)} className="px-6 py-3 bg-emerald-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"><Check size={18} className="inline mr-2"/>Valider</button>
+                       </div>
+                    </div>
+                 ))}
+                 {proposals.length === 0 && <p className="text-center py-20 text-slate-300 font-black uppercase text-xs">Aucune proposition à arbitrer</p>}
+              </div>
+           </div>
+        )}
+
+        {/* PLANIFICATION (ENSEIGNANT) */}
         {role === 'TEACHER' && activeTab === 'PLAN' && (
           <div className="max-w-4xl mx-auto animate-in space-y-8">
-             <header className="bg-emerald-600 p-12 rounded-[50px] text-white shadow-2xl">
-                <h1 className="text-4xl font-black uppercase tracking-tighter">Planifier un Cours</h1>
-                <p className="text-emerald-100 font-bold text-[10px] uppercase tracking-[0.3em] mt-2">Saisie des vœux de séance</p>
-             </header>
-
-             <form onSubmit={handleAddProposal} className="bg-white p-12 rounded-[50px] shadow-sm border border-slate-100 grid md:grid-cols-2 gap-8">
-                {/* Information de capacité en temps réel */}
-                <div className="md:col-span-2 flex gap-4">
-                   <div className="flex-1 bg-slate-50 p-4 rounded-3xl border border-slate-100">
-                      <p className="text-[8px] font-black text-slate-400 uppercase">Effectif Classe</p>
-                      <p className="text-xl font-black text-slate-700">{selectedClass?.studentCount || '--'} <span className="text-xs">Étud.</span></p>
-                   </div>
-                   <div className={`flex-1 p-4 rounded-3xl border ${isCapacityInsufficient ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100'}`}>
-                      <p className={`text-[8px] font-black uppercase ${isCapacityInsufficient ? 'text-rose-400' : 'text-emerald-400'}`}>Capacité Salle</p>
-                      <p className={`text-xl font-black ${isCapacityInsufficient ? 'text-rose-600' : 'text-emerald-600'}`}>{selectedRoom?.capacity || '--'} <span className="text-xs">Places</span></p>
-                   </div>
+             <header className="bg-emerald-600 p-10 rounded-[50px] text-white shadow-2xl relative overflow-hidden">
+                <div className="relative z-10">
+                   <h1 className="text-4xl font-black uppercase tracking-tighter">Nouvelle Séance</h1>
+                   <p className="text-emerald-100 font-bold text-[10px] uppercase tracking-[0.3em] mt-2">Soumission d'un vœu d'horaire</p>
                 </div>
-
+             </header>
+             <form onSubmit={handleAddProposal} className="bg-white p-12 rounded-[55px] shadow-xl border border-slate-100 grid md:grid-cols-2 gap-8">
                 <div className="space-y-2">
                    <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Date de passage</label>
-                   <input required type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold outline-none focus:border-emerald-500" />
+                   <input required type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold outline-none focus:border-indigo-500" />
                 </div>
-
                 <div className="space-y-2">
                    <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Plage Horaire</label>
-                   <select required value={form.slot} onChange={e => setForm({...form, slot: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold outline-none focus:border-emerald-500">
-                      <option value="">Choisir...</option>
+                   <select required value={form.slot} onChange={e => setForm({...form, slot: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold outline-none focus:border-indigo-500">
+                      <option value="">Sélectionner...</option>
                       {SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
                    </select>
                 </div>
-
                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Classe</label>
-                   <select required value={form.classId} onChange={e => setForm({...form, classId: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold outline-none focus:border-emerald-500">
-                      <option value="">Sélectionner une classe...</option>
+                   <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Classe concernée</label>
+                   <select required value={form.classId} onChange={e => setForm({...form, classId: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold outline-none focus:border-indigo-500">
+                      <option value="">Choisir la classe...</option>
                       {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                    </select>
                 </div>
-
                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Salle</label>
-                   <select required value={form.roomId} onChange={e => setForm({...form, roomId: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold outline-none focus:border-emerald-500">
-                      <option value="">Sélectionner une salle...</option>
+                   <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Salle souhaitée</label>
+                   <select required value={form.roomId} onChange={e => setForm({...form, roomId: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold outline-none focus:border-indigo-500">
+                      <option value="">Choisir la salle...</option>
                       {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                    </select>
                 </div>
-
                 <div className="space-y-2">
                    <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Code UE</label>
-                   <input required placeholder="Ex: ICT 203" value={form.ueCode} onChange={e => setForm({...form, ueCode: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold outline-none focus:border-emerald-500" />
+                   <input required placeholder="Ex: ICT 203" value={form.ueCode} onChange={e => setForm({...form, ueCode: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold outline-none focus:border-indigo-500" />
                 </div>
-
                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Nom UE</label>
-                   <input required placeholder="Ex: Génie Logiciel" value={form.ueName} onChange={e => setForm({...form, ueName: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold outline-none focus:border-emerald-500" />
+                   <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Intitulé UE</label>
+                   <input required placeholder="Ex: Algorithmique" value={form.ueName} onChange={e => setForm({...form, ueName: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold outline-none focus:border-indigo-500" />
                 </div>
-
-                <button type="submit" disabled={isCapacityInsufficient || !form.classId || !form.roomId} className={`md:col-span-2 py-6 rounded-3xl font-black uppercase text-xs tracking-widest shadow-2xl transition-all ${isCapacityInsufficient ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-[#0f172a] text-white hover:bg-emerald-600 active:scale-95'}`}>
-                   {isCapacityInsufficient ? 'Capacité Insuffisante' : 'Soumettre la proposition'}
+                <button type="submit" disabled={isCapacityInsufficient || !form.classId || !form.roomId} className={`md:col-span-2 py-6 rounded-3xl font-black uppercase text-xs tracking-widest shadow-2xl transition-all ${isCapacityInsufficient ? 'bg-slate-100 text-slate-300' : 'bg-slate-900 text-white hover:bg-indigo-600'}`}>
+                   Soumettre pour arbitrage
                 </button>
              </form>
           </div>
         )}
 
-        {/* CONFIGURATION (ADMIN) */}
-        {role === 'ADMIN' && activeTab === 'CONFIG' && (
-           <div className="max-w-5xl mx-auto space-y-12 animate-in">
-              <header className="bg-amber-600 p-10 rounded-[40px] text-white flex justify-between items-center shadow-xl">
-                 <div>
-                    <h1 className="text-3xl font-black uppercase tracking-tighter">Paramétrage Système</h1>
-                    <p className="text-amber-100 font-bold text-[10px] uppercase tracking-widest">Salles, Classes et Effectifs</p>
-                 </div>
-                 <Settings size={40} className="opacity-20"/>
-              </header>
-
-              <div className="grid md:grid-cols-2 gap-8">
-                 <div className="bg-white p-8 rounded-[40px] border border-slate-100">
-                    <h3 className="text-lg font-black uppercase tracking-tighter mb-6 flex items-center gap-2 text-amber-600"><MapPin size={18}/> Salles Pré-définies</h3>
-                    <div className="space-y-2">
-                       {rooms.map(r => (
-                         <div key={r.id} className="p-4 bg-slate-50 rounded-2xl flex justify-between items-center font-bold">
-                            <span>{r.name}</span>
-                            <span className="text-[10px] bg-amber-100 text-amber-700 px-3 py-1 rounded-full">{r.capacity} places</span>
-                         </div>
-                       ))}
-                    </div>
-                 </div>
-                 <div className="bg-white p-8 rounded-[40px] border border-slate-100">
-                    <h3 className="text-lg font-black uppercase tracking-tighter mb-6 flex items-center gap-2 text-indigo-600"><Users size={18}/> Classes & Effectifs</h3>
-                    <div className="space-y-2">
-                       {classes.map(c => (
-                         <div key={c.id} className="p-4 bg-slate-50 rounded-2xl flex justify-between items-center font-bold">
-                            <span>{c.name}</span>
-                            <span className="text-[10px] bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">{c.studentCount} étud.</span>
-                         </div>
-                       ))}
-                    </div>
-                 </div>
-              </div>
-           </div>
-        )}
-
-        {/* ARBITRAGE (ADMIN) */}
-        {role === 'ADMIN' && activeTab === 'ARBITRAGE' && (
-           <div className="max-w-4xl mx-auto space-y-6 animate-in">
-              <h2 className="text-3xl font-black uppercase tracking-tighter mb-8">Arbitrage des séances</h2>
-              {proposals.map(p => (
-                <div key={p.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm flex justify-between items-center group hover:border-amber-400 transition-all">
-                   <div className="flex gap-6 items-center">
-                      <div className="w-16 h-16 bg-slate-100 rounded-3xl flex items-center justify-center font-black text-slate-400 text-xl">{p.teacherName[0]}</div>
-                      <div>
-                         <h4 className="font-black text-slate-900 uppercase text-lg">{p.ueName} <span className="text-indigo-500 text-xs ml-2">[{p.ueCode}]</span></h4>
-                         <div className="flex gap-4 mt-2">
-                            <span className="text-[10px] font-black uppercase bg-indigo-50 px-3 py-1 rounded-full text-indigo-600">{p.className}</span>
-                            <span className="text-[10px] font-black uppercase bg-amber-50 px-3 py-1 rounded-full text-amber-600">{p.roomName}</span>
-                         </div>
-                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Par : {p.teacherName}</p>
-                      </div>
-                   </div>
-                   <div className="flex gap-3">
-                      {/* Fix: Changed parameter name from 'p' to 'prev' in setProposals to avoid shadowing and fix 'Property id does not exist on type any[]' error */}
-                      <button onClick={() => setProposals(prev => prev.filter(x => x.id !== p.id))} className="w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all"><X size={20}/></button>
-                      <button onClick={() => validateProposal(p.id)} className="px-8 h-14 bg-emerald-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-emerald-600 transition-all flex items-center gap-2">
-                         <Check size={16}/> Valider
-                      </button>
-                   </div>
-                </div>
-              ))}
-              {proposals.length === 0 && <p className="text-center py-20 text-slate-300 font-black uppercase text-xs">Aucune proposition en attente</p>}
-           </div>
-        )}
-
-        {/* AUDIT */}
+        {/* AUDIT (AVEC TRACABILITÉ SYSTÈME) */}
         {activeTab === 'AUDIT' && (
            <div className="max-w-4xl mx-auto space-y-4 animate-in">
-              <h2 className="text-3xl font-black uppercase tracking-tighter mb-10">Journal d'Audit</h2>
+              <h2 className="text-3xl font-black uppercase tracking-tighter mb-8">Journal d'Audit Intégré</h2>
               {auditLogs.map(log => (
-                <div key={log.id} className="bg-white p-6 rounded-[32px] border border-slate-100 flex items-center justify-between">
-                   <div className="flex items-center gap-6">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white ${log.role === 'ADMIN' ? 'bg-amber-500' : 'bg-indigo-600'}`}>{log.user[0]}</div>
+                <div key={log.id} className={`p-5 rounded-[30px] border flex items-center justify-between text-xs ${log.user.includes('Moteur') ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-100'}`}>
+                   <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-black ${log.user.includes('Moteur') ? 'bg-indigo-600' : (log.role === 'ADMIN' ? 'bg-amber-500' : 'bg-slate-900')}`}>{log.user[0]}</div>
                       <div>
-                         <p className="text-[11px] font-black uppercase text-slate-900">{log.user}</p>
-                         <p className="text-sm font-bold text-slate-500 mt-1">{log.action} : <span className="text-indigo-600 font-black">{log.details}</span></p>
+                         <p className="font-black text-slate-900 uppercase">{log.user}</p>
+                         <p className="text-slate-500 font-medium">{log.action} : {log.details}</p>
                       </div>
                    </div>
-                   <p className="text-[10px] font-black text-slate-300 uppercase">{log.time}</p>
+                   <span className="text-[10px] font-bold text-slate-300 uppercase">{log.time}</span>
                 </div>
               ))}
            </div>
